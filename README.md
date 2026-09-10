@@ -1,239 +1,678 @@
-# Yhack_YH606_ROBOFORGE
-An intelligent door security system combining ToF sensing, person detection, face recognition, and Telegram notifications.
+# Smart Door Security System
 
-## Project Description
+## Overview
 
-The **Smart Door Security System Using Edge AI** is an intelligent security system designed to detect and identify people standing near a door and immediately notify the owner through **Telegram**.
+Smart Door Security is an edge-AI and IoT based security system designed to monitor a doorstep, identify visitors, and alert the owner through Telegram.
 
-The system combines an **ESP32, Time-of-Flight (ToF) distance sensor, camera, active buzzer, microphone, speaker, and Edge AI processing**.
+The system combines:
 
-The ToF sensor continuously measures the distance in front of the door. When a person comes within the configured detection range, the system starts monitoring how long the person remains near the door.
+- A separate USB webcam for continuous visual monitoring
+- YOLOv8n for person detection
+- Face recognition for known/unknown visitor identification
+- ESP32 for sensor-side processing and hardware control
+- VL53L0X ToF sensor for distance and dwell-time confirmation
+- Telegram bot for remote alerts and owner control
+- Two-way voice communication between the owner and the doorstep
+- Active buzzer for local alerting
+- FastAPI live video streaming
 
-This **dwell-time detection** helps prevent unnecessary alerts when somebody simply walks past the door.
+The main idea is sensor fusion: a Telegram security alert is generated only when a person is detected by the camera and the ToF sensor confirms that the person is inside the configured detection zone for the required dwell time.
 
-Once a visitor is confirmed, the camera captures the person and the Edge AI system performs:
+---
 
-- Person detection
-- Face detection
-- Face recognition
-- Known/unknown visitor classification
+## System Architecture
 
-If the visitor is recognized, the system sends a Telegram notification containing the person's name.
+```text
+                    ┌──────────────────────┐
+                    │     USB Webcam       │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │     YOLOv8n          │
+                    │  Person Detection    │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │   Face Recognition   │
+                    │ Known / Unknown       │
+                    └──────────┬───────────┘
+                               │
+                               │
+┌─────────────────┐            ▼
+│ VL53L0X ToF     │──────► Sensor Fusion
+│ Distance/Dwell  │            │
+└────────┬────────┘            ▼
+         │             ┌──────────────────┐
+         │             │  State Machine   │
+         │             │ PASSIVE          │
+         │             │ DWELL CHECK      │
+         │             │ HIGH ALERT       │
+         │             └────────┬─────────┘
+         │                      │
+         ▼                      ▼
+┌─────────────────┐     ┌──────────────────┐
+│      ESP32      │     │  Telegram Bot    │
+│ Sensor + Buzzer │     │ Alert + Control  │
+└─────────────────┘     └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │ Owner Smartphone │
+                         └────────┬─────────┘
+                                  │
+                           Voice / Text Reply
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │ Laptop Speaker   │
+                         └──────────────────┘
+```
+
+---
+
+## Core Detection Logic
+
+The system has three main security states.
+
+### 1. PASSIVE
+
+The camera continuously runs person detection and the ESP32 continuously provides ToF distance information.
+
+No Telegram push alert is generated.
+
+The system can log the observation for history and monitoring.
+
+### 2. DWELL CHECK
+
+This state begins when:
+
+```text
+Person detected by camera
+        AND
+Person is inside configured ToF zone
+```
+
+The system starts measuring how long the person remains in the zone.
+
+### 3. HIGH ALERT
+
+A high alert is generated only when:
+
+```text
+Person detected
+        AND
+ToF distance is inside the configured zone
+        AND
+Required dwell time is reached
+```
+
+Face recognition determines whether the visitor is known or unknown.
+
+The owner receives a Telegram alert containing the visitor information and a photo.
+
+---
+
+## Security Modes
+
+### Individual House Mode
+
+```text
+Detection distance: < 120 cm
+Required dwell time: > 2 seconds
+```
+
+This mode is intended for an individual house where a visitor approaching the door should be considered relevant.
+
+### Apartment Mode
+
+```text
+Detection distance: < 50 cm
+Required dwell time: > 3 seconds
+```
+
+This mode is stricter to reduce alerts caused by neighbours and people simply walking past the door.
+
+The Telegram command can be used to change the mode:
+
+```text
+/mode individual
+/mode apartment
+```
+
+---
+
+## Visitor Identification
+
+The project uses unique visitor IDs.
 
 Example:
 
-> 🚪 **Visitor Alert**  
-> visitorName has arrived at your house.
+```text
+VISITOR_001
+VISITOR_002
+VISITOR_003
+```
 
-If the visitor is not recognized, the owner receives a security alert.
+Known visitors have a name associated with their visitor ID.
 
 Example:
 
-> ⚠️ **Security Alert**  
-> Stranger detected at your door.
-
-A captured image of the visitor can also be sent through Telegram.
-
-The owner can interact with the security system using the Telegram bot. The system also supports alarm/buzzer control and is designed to support two-way audio communication between the owner and the visitor.
-
-### Basic System Flow
-
 ```text
-Person Approaches Door
-        |
-        v
-ToF Distance Detection
-        |
-        v
-Dwell-Time Validation
-        |
-        v
-Person Detection
-        |
-        v
-Face Recognition
-        |
-        v
-Camera Capture
-        |
-        v
- +---------------+
- |               |
-Known         Stranger
-Person           |
- │               |
- +-------+-------+
-         |
-         v
-Telegram Notification + image 
-         |
-         v
-       Owner
+Visitor ID: VISITOR_001
+Name: Abidesh
+Status: KNOWN
 ```
 
-## Hardware Components 
-1. ESP32 Development Board:
-
-- The ESP32 is the main microcontroller and hardware-control unit of the Smart Door Security System.
-- It provides communication between the physical door-side hardware and the Edge AI system running on the laptop/local computer.
-
-    Main Responsibilities:
-    - Connect to Wi-Fi
-    - Read the VL53L0X ToF sensor
-    - Send sensor readings to the backend
-    - Receive commands from the backend
-    - Control the active buzzer
-    - Interface with the microphone
-    - Interface with the speaker/amplifier
-    - Handle real-time hardware communication
-
-2. VL53L0X Time-of-Flight Sensor:
-
-- The VL53L0X is a Time-of-Flight distance sensor used to determine whether a person is physically close to the door.
-- It measures the distance between the sensor and the object/person in front of it.
-
-    Purpose:
-    - Detect a visitor near the door
-    - Measure visitor distance
-    - Start dwell-time monitoring
-    - Confirm whether a person remains near the door
-    - Reduce false alerts
-    - Distinguish between a passer-by and a visitor
-
-3. Camera:
-
-- The camera provides visual information to the Edge AI system.
-- The camera continuously captures frames that can be processed by the computer-vision modules.
-
-   Main Functions:
-   - Capture visitor video
-   - Capture visitor images
-   - Provide frames for person detection
-   - Provide frames for face detection
-   - Provide facial information for recognition
-   - Capture images for Telegram notifications
-
-4. Active Buzzer:
-
-- The active buzzer acts as the local audible alarm.
-- An active buzzer can generate a sound when activated by the ESP32.
-
-   Main Functions:
-   - Generate a local security alert
-   - Warn a visitor or stranger
-   - Respond to security-system commands
-   - Support Telegram-controlled alarm functionality
-   - Automatically turn off after the configured duration
-
-5. INMP441 I2S Microphone:
-
-- The INMP441 is a digital MEMS microphone used to capture the visitor's voice.
-- It communicates digitally with the ESP32 using the I2S interface.
-
-   Main Functions:
-   - Capture audio near the door
-   - Record visitor voice
-   - Send microphone audio to the ESP32
-   - Support visitor-to-owner communication
-   - Provide audio for Telegram communication
-
-6. MAX98357A I2S Audio Amplifier:
-
-- The MAX98357A is a digital I2S audio amplifier used to drive the speaker.
-- The ESP32 sends digital audio to the MAX98357A, which converts and amplifies the signal for the speaker.
-
-   Main Functions:
-   - Receive I2S digital audio from the ESP32
-   - Convert digital audio for speaker playback
-   - Amplify the audio signal
-   - Drive the speaker
-
-7. Speaker:
-
-- The speaker provides audio output near the door.
-- It works with the MAX98357A amplifier and ESP32.
-
-   Main Functions:
-   - Play owner's voice
-   - Play warning audio
-   - Provide local audio output
-
-8. Laptop / Local Computer:
-- The laptop or local computer acts as the main Edge AI processing unit and backend server.
-- The ESP32 is used mainly for sensors and hardware control, while the laptop performs computationally intensive AI operations.
-
-   Main Functions:
-   - Receive camera frames
-   - Run YOLOv8n person detection
-   - Perform face detection
-   - Perform face recognition
-   - Compare known-face encodings
-   - Perform visitor tracking
-   - Run dwell-time logic
-   - Handle WebSocket communication
-   - Run the Telegram bot
-   - Send Telegram notifications
-   - Store visitor events
-   - Manage the SQLite database
-   - Handle audio bridging
-
-### Hardware workflow
+Unknown visitors are initially represented as:
 
 ```text
-
-Visitor Approaches Door
-          |
-          v
-+-------------------------+
-|        Camera           |
-| Captures live video     |
-+-----------+-------------+
-            |
-            | USB Video
-            v
-+-------------------------+
-| Edge AI Laptop          |
-|                         |
-| - OpenCV                |
-| - YOLOv8n               |
-| - Face Recognition      |
-| - SQLite                |
-| - Resnet                |
-| - Telegram              |
-+-----------+-------------+
-            ^
-            |
-          Wi-Fi 
-            |
-            v
-+-------------------------+
-| ESP32 Controller        |
-+-----------+-------------+
-            |
-      +-----+------+----------------+
-      |            |                |
-      v            v                v
- VL53L0X       INMP441          Active Buzzer
- ToF Sensor    Microphone       Alarm
-      |            |
- Distance       Visitor Voice
-      |            |
-      +------------+
-            |
-            v
-          ESP32
-            |
-            | I2S Audio Output
-            v
-      +-------------+
-      | MAX98357A   |
-      | Amplifier   |
-      +------+------+
-             |
-             v
-        4Ω 3W Speaker
-             |
-             v
-          Visitor
-
+Visitor ID: VISITOR_002
+Name: Unknown
+Status: UNKNOWN
 ```
+
+Security events also receive unique event IDs:
+
+```text
+EVT_0001
+EVT_0002
+EVT_0003
+```
+
+This allows individual visitor identities and individual security events to be tracked separately.
+
+---
+
+## Visual Status Overlay
+
+The planned camera interface uses three visual states:
+
+### Yellow — SEARCHING
+
+A person has been detected and face recognition is being performed.
+
+### Green — KNOWN
+
+The face matches a registered visitor.
+
+The display can show:
+
+```text
+KNOWN
+Name: Abidesh
+ID: VISITOR_001
+```
+
+### Red — UNKNOWN
+
+The face does not match a registered visitor.
+
+The display can show:
+
+```text
+UNKNOWN
+ID: VISITOR_002
+```
+
+The live display can also show:
+
+- Distance
+- Dwell time
+- Security mode
+- Current state
+- Alert status
+
+---
+
+## Telegram Features
+
+The Telegram bot is the remote control interface for the system.
+
+Implemented/tested commands include:
+
+```text
+/start
+/test
+/alarm
+/mode
+/history
+/addknown
+/addunknown
+/addevent
+/testalert
+/testunknownalert
+/testcooldown
+```
+
+### `/start`
+
+Displays the bot connection status and available commands.
+
+### `/test`
+
+Tests Telegram communication.
+
+### `/alarm`
+
+Triggers the alarm/buzzer command interface.
+
+### `/mode`
+
+Displays the current security mode.
+
+It can also change the mode:
+
+```text
+/mode individual
+/mode apartment
+```
+
+### `/history`
+
+Displays recent security events.
+
+Each event can contain:
+
+```text
+Event ID
+Visitor
+Time
+Distance
+Dwell
+Status
+```
+
+### `/addknown`
+
+Creates a known visitor record.
+
+Example:
+
+```text
+/addknown Abidesh
+```
+
+### `/addunknown`
+
+Creates an unknown visitor record.
+
+### `/testalert`
+
+Tests a known visitor alert with a photo.
+
+### `/testunknownalert`
+
+Tests an unknown visitor alert with a photo.
+
+### `/testcooldown`
+
+Tests the alert cooldown system.
+
+---
+
+## Telegram Alert Format
+
+### Known Visitor
+
+Example:
+
+```text
+🟢 KNOWN VISITOR ALERT
+
+👤 Name: Abidesh
+🆔 Visitor ID: VISITOR_001
+🆔 Event ID: EVT_0001
+
+📏 Distance: 82 cm
+⏱ Dwell: 3.2 sec
+📌 Status: HIGH ALERT
+```
+
+A visitor photo is attached to the alert.
+
+### Unknown Visitor
+
+Example:
+
+```text
+🔴 UNKNOWN VISITOR ALERT
+
+👤 Visitor ID: VISITOR_002
+🆔 Event ID: EVT_0002
+
+📏 Distance: 45 cm
+⏱ Dwell: 3.5 sec
+📌 Status: HIGH ALERT
+```
+
+A visitor photo is attached to the alert.
+
+---
+
+## Alert Cooldown
+
+A cooldown prevents repeated Telegram alerts while the same visitor remains at the door.
+
+Current test configuration:
+
+```text
+Cooldown: 10 seconds
+```
+
+The cooldown is checked before sending an alert.
+
+This prevents notification spam.
+
+---
+
+## Two-Way Voice Communication
+
+The system supports owner-to-door voice communication.
+
+### Owner → Door
+
+The owner sends a Telegram voice message.
+
+The laptop:
+
+1. Receives the Telegram voice message
+2. Downloads the `.ogg` file
+3. Converts it to WAV using FFmpeg
+4. Plays the WAV through the configured speaker
+
+The owner voice communication has been tested successfully.
+
+The current tested workflow produces messages such as:
+
+```text
+🎤 Voice message received!
+💾 Voice saved as owner_voice.ogg
+🔄 Voice converted from OGG to WAV
+🔊 Playing owner voice...
+✅ Voice playback completed.
+```
+
+### Visitor → Owner
+
+The planned reverse communication path is:
+
+```text
+Visitor microphone
+       ↓
+Laptop records audio
+       ↓
+Audio saved
+       ↓
+Telegram voice message
+       ↓
+Owner smartphone
+```
+
+The communication can support multiple turns.
+
+---
+
+## Hardware
+
+Current hardware architecture:
+
+- Laptop for edge-AI inference and system control
+- Separate USB webcam
+- ESP32 development board
+- VL53L0X Time-of-Flight distance sensor
+- Active buzzer
+- USB microphone
+- Speaker
+- USB cable / serial communication
+- Breadboard and jumper wires
+- Suitable power supply
+
+The ESP32 is used for sensor-side operations and buzzer control.
+
+The laptop performs the computationally heavier vision and AI tasks.
+
+---
+
+## Software Stack
+
+### Python
+
+Main application language.
+
+### OpenCV
+
+Used for webcam capture and image processing.
+
+### YOLOv8n
+
+Used for real-time person detection.
+
+### Face Recognition
+
+Used to compare detected faces with registered visitors.
+
+### FastAPI + Uvicorn
+
+Used for the live camera API/server.
+
+### Telegram Bot API
+
+Used for:
+
+- Security alerts
+- Photos
+- Voice communication
+- Commands
+- History
+- Mode control
+
+### PySerial
+
+Used for laptop ↔ ESP32 serial communication.
+
+### Pygame
+
+Used for audio playback.
+
+### FFmpeg
+
+Used to convert Telegram OGG/Opus voice messages into WAV audio suitable for playback.
+
+### pyttsx3
+
+Used for converting owner text replies into speech.
+
+### SQLite
+
+Used for persistent security history and visitor/event records.
+
+---
+
+## Suggested Project Structure
+
+```text
+SMART_DOOR_SECURITY/
+│
+├── main.py
+├── config.py
+├── requirements.txt
+├── README.md
+│
+├── telegram/
+│   ├── __init__.py
+│   ├── bot.py
+│   ├── commands.py
+│   ├── alerts.py
+│   └── voice.py
+│
+├── esp32/
+│   ├── esp32.ino
+│   └── serial_controller.py
+│
+├── vision/
+│   ├── camera.py
+│   ├── yolo_detector.py
+│   ├── face_recognition.py
+│   └── visual_overlay.py
+│
+├── security/
+│   ├── fusion.py
+│   ├── state_machine.py
+│   └── cooldown.py
+│
+├── database/
+│   ├── database.py
+│   └── visitors.db
+│
+├── audio/
+│   ├── audio_manager.py
+│   ├── recorder.py
+│   ├── player.py
+│   └── tts.py
+│
+├── web/
+│   ├── server.py
+│   └── live_stream.py
+│
+├── photos/
+├── recordings/
+├── sounds/
+│   └── greeting.wav
+│
+└── tests/
+    ├── test_telegram.py
+    ├── test_esp32.py
+    ├── test_camera.py
+    └── test_tof.py
+```
+
+---
+
+## System Workflow
+
+```text
+1. System starts
+        ↓
+2. USB webcam starts
+        ↓
+3. YOLO continuously detects people
+        ↓
+4. ESP32 reads VL53L0X distance
+        ↓
+5. Person + distance are combined
+        ↓
+6. If outside zone → PASSIVE
+        ↓
+7. If inside zone → DWELL CHECK
+        ↓
+8. Required dwell time reached?
+        ↓
+9. Yes → Face recognition
+        ↓
+10. Known or Unknown
+        ↓
+11. Capture visitor photo
+        ↓
+12. Create Visitor ID / Event ID
+        ↓
+13. Send Telegram alert
+        ↓
+14. Trigger local buzzer if configured
+        ↓
+15. Begin owner/visitor communication
+        ↓
+16. Apply cooldown
+```
+
+---
+
+## Development and Testing Progress
+
+The following parts have already been tested during development:
+
+- Telegram bot connection
+- Telegram `/start`
+- Telegram communication test
+- Known visitor alert
+- Unknown visitor alert
+- Photo attachment to Telegram alert
+- Event IDs
+- Visitor IDs
+- Security history
+- Individual/apartment mode commands
+- Alert cooldown
+- Telegram voice reception
+- OGG voice download
+- OGG → WAV conversion using FFmpeg
+- WAV audio playback
+
+Next integration stages are:
+
+1. Test separate USB webcam with OpenCV
+2. Integrate YOLOv8n person detection
+3. Add face recognition
+4. Add visual bounding-box states
+5. Test ESP32 serial communication
+6. Integrate VL53L0X ToF
+7. Implement dwell-time logic
+8. Combine camera + ToF using sensor fusion
+9. Connect real detection pipeline to Telegram alerts
+10. Add visitor microphone recording
+11. Complete visitor → owner voice communication
+12. Add text → speech owner response
+13. Integrate FastAPI live stream
+14. Final end-to-end demonstration
+
+---
+
+## Security and Privacy
+
+The Telegram bot token should never be committed to GitHub.
+
+Use environment variables or a local configuration file that is excluded by `.gitignore`.
+
+Example:
+
+```text
+TELEGRAM_BOT_TOKEN=your_token_here
+TELEGRAM_CHAT_ID=your_chat_id_here
+```
+
+Do not upload:
+
+- Telegram bot tokens
+- Private chat IDs
+- Personal visitor photographs
+- Recorded private conversations
+- Local database files containing private information
+
+Use `.gitignore` for secrets, generated recordings, photos, and local databases.
+
+---
+
+## Hackathon Goal
+
+The project demonstrates a practical smart-door security architecture where computer vision and physical sensing work together.
+
+Instead of relying only on a camera, the system uses:
+
+```text
+Vision + Distance + Dwell Time + Face Recognition
+```
+
+This reduces unnecessary alerts caused by people who are merely passing the camera.
+
+The final system aims to provide:
+
+- Intelligent visitor detection
+- Known/unknown identification
+- Sensor-based confirmation
+- Real-time Telegram alerts
+- Visitor photographs
+- Event history
+- Remote security controls
+- Two-way voice communication
+- Local audible warning
+- Live video monitoring
