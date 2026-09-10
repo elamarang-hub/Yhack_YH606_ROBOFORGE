@@ -106,3 +106,66 @@ Telegram Notification + image
    - Capture images for Telegram notifications
 
 4. Active Buzzer:
+
+- The active buzzer acts as the local audible alarm.
+- An active buzzer can generate a sound when activated by the ESP32.
+
+   Main Functions:
+   - Generate a local security alert
+   - Warn a visitor or stranger
+   - Respond to security-system commands
+   - Support Telegram-controlled alarm functionality
+   - Automatically turn off after the configured duration
+
+5. INMP441 I2S Microphone:
+
+- The INMP441 is a digital MEMS microphone used to capture the visitor's voice.
+- It communicates digitally with the ESP32 using the I2S interface.
+
+   Main Functions:
+   - Capture audio near the door
+   - Record visitor voice
+   - Send microphone audio to the ESP32
+   - Support visitor-to-owner communication
+   - Provide audio for Telegram communication
+
+6. MAX98357A I2S Audio Amplifier:
+
+- The MAX98357A is a digital I2S audio amplifier used to drive the speaker.
+- The ESP32 sends digital audio to the MAX98357A, which converts and amplifies the signal for the speaker.
+
+   Main Functions:
+   - Receive I2S digital audio from the ESP32
+   - Convert digital audio for speaker playback
+   - Amplify the audio signal
+   - Drive the speaker
+
+7. Speaker:
+
+- The speaker provides audio output near the door.
+- It works with the MAX98357A amplifier and ESP32.
+
+   Main Functions:
+   - Play owner's voice
+   - Play warning audio
+   - Provide local audio output
+
+8. Laptop / Local Computer:
+- The laptop or local computer acts as the main Edge AI processing unit and backend server.
+- The ESP32 is used mainly for sensors and hardware control, while the laptop performs computationally intensive AI operations.
+
+   Main Functions:
+   - Receive camera frames
+   - Run YOLOv8n person detection
+   - Perform face detection
+   - Perform face recognition
+   - Compare known-face encodings
+   - Perform visitor tracking
+   - Run dwell-time logic
+   - Handle WebSocket communication
+   - Run the Telegram bot
+   - Send Telegram notifications
+   - Store visitor events
+   - Manage the SQLite database
+   - Handle audio bridging
+
