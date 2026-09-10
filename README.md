@@ -40,26 +40,34 @@ The owner can interact with the security system using the Telegram bot. The syst
 
 ```text
 Person Approaches Door
-        ↓
+        |
+        v
 ToF Distance Detection
-        ↓
+        |
+        v
 Dwell-Time Validation
-        ↓
+        |
+        v
 Person Detection
-        ↓
+        |
+        v
 Face Recognition
-        ↓
+        |
+        v
 Camera Capture
-        ↓ 
- ┌───────────────┐
- │               │
+        |
+        v
+ +---------------+
+ |               |
 Known         Stranger
-Person
- │               │
- └───────┬───────┘
-         ↓
+Person           |
+ │               |
+ +-------+-------+
+         |
+         v
 Telegram Notification + image 
-         ↓
+         |
+         v
        Owner
 ```
 
@@ -169,3 +177,63 @@ Telegram Notification + image
    - Manage the SQLite database
    - Handle audio bridging
 
+### Hardware workflow
+
+```text
+
+Visitor Approaches Door
+          |
+          v
++-------------------------+
+|        Camera           |
+| Captures live video     |
++-----------+-------------+
+            |
+            | USB Video
+            v
++-------------------------+
+| Edge AI Laptop          |
+|                         |
+| - OpenCV                |
+| - YOLOv8n               |
+| - Face Recognition      |
+| - SQLite                |
+| - Resnet                |
+| - Telegram              |
++-----------+-------------+
+            ^
+            |
+          Wi-Fi 
+            |
+            v
++-------------------------+
+| ESP32 Controller        |
++-----------+-------------+
+            |
+      +-----+------+----------------+
+      |            |                |
+      v            v                v
+ VL53L0X       INMP441          Active Buzzer
+ ToF Sensor    Microphone       Alarm
+      |            |
+ Distance       Visitor Voice
+      |            |
+      +------------+
+            |
+            v
+          ESP32
+            |
+            | I2S Audio Output
+            v
+      +-------------+
+      | MAX98357A   |
+      | Amplifier   |
+      +------+------+
+             |
+             v
+        4Ω 3W Speaker
+             |
+             v
+          Visitor
+
+```
