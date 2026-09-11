@@ -1,0 +1,15 @@
+OK   cv2
+OK   ultralytics
+OK   serial
+OK   telegram
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.5)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+OK   pygame
+OK   numpy
+OK   fastapi
+OK   uvicorn
+OK   pyttsx3
+FAIL pyaudio : No module named 'pyaudio'
+FAIL face_recognition : No module named 'face_recognition'
+OK   dotenv
+FFmpeg: C:\Users\Hp\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0.1-full_build\bin\ffmpeg.EXE
